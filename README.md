@@ -13,6 +13,7 @@ ext-idle-notify-v1 is needed.
  - meson \*
  - wayland
  - wayland-protocols \*
+ - libnotify
 
 *\* Build dependency*
 
@@ -22,11 +23,11 @@ ext-idle-notify-v1 is needed.
 meson setup build/
 ninja -C build/
 ```
-Excutable located at `build/pme`.
+Executable located at `build/pme`.
 
 ## Credits&Notes
 
-Code are mainly taken from
+Codes are mainly taken from
 [swayidle](https://github.com/swaywm/swayidle).
 This tool is crafted for learning wayland protocols and programming purpose.
 In other words, it's just a toy, but at least it works. :)
