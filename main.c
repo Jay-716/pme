@@ -53,6 +53,7 @@ static NotifyNotification * get_notify_message(const char *summary, const char *
 }
 
 static void show_notify_message(NotifyNotification *msg) {
+    pme_log(LOG_INFO, "Showing notification message.");
     notify_notification_show(msg, NULL);
 }
 
@@ -77,6 +78,7 @@ static void pme_init(const char *app_name) {
 }
 
 static void pme_terminate(int exit_code) {
+    pme_log(LOG_INFO, "Terminating.");
 	wl_display_disconnect(display);
 	wl_event_loop_destroy(event_loop);
     destroy_libnotify(message);
@@ -128,16 +130,16 @@ static int handle_signal(int sig, void *data) {
 	switch (sig) {
         case SIGINT:
         case SIGTERM:
-            pme_log(LOG_DEBUG, "Got SIGTERM");
+            pme_log(LOG_DEBUG, "Got SIGTERM.");
             pme_terminate(0);
             return 0;
         case SIGUSR1:
-            pme_log(LOG_DEBUG, "Got SIGUSR1");
+            pme_log(LOG_DEBUG, "Got SIGUSR1.");
             // Cancel the alarm.
             register_alarm(0);
             return 1;
         case SIGALRM:
-            pme_log(LOG_DEBUG, "Got SIGALRM");
+            pme_log(LOG_DEBUG, "Got SIGALRM.");
             show_notify_message(message);
             // Reset the alarm.
             time_left = alarm_seconds;
@@ -166,6 +168,7 @@ static const struct wl_seat_listener wl_seat_listener = {
 
 static void handle_global(void *data, struct wl_registry *registry,
 		uint32_t name, const char *interface, uint32_t version) {
+    pme_log(LOG_DEBUG, "Found interface %s.", interface);
 	if (strcmp(interface, ext_idle_notifier_v1_interface.name) == 0) {
 		idle_notifier =
 			wl_registry_bind(registry, name, &ext_idle_notifier_v1_interface, 1);
@@ -226,7 +229,7 @@ static int display_event(int fd, uint32_t mask, void *data) {
 	}
 
 	if (count < 0) {
-		pme_log_errno(LOG_ERROR, "wl_display_dispatch failed, exiting");
+		pme_log_errno(LOG_ERROR, "wl_display_dispatch failed, exiting.");
 		pme_terminate(0);
 	}
 
@@ -246,11 +249,13 @@ int ext_idle_notify_v1_setup(unsigned int timeout) {
         pme_terminate(-1);
         return -1;
     }
+    pme_log(LOG_DEBUG, "Connected to wayland display.");
 
 	struct wl_registry *registry = wl_display_get_registry(display);
 	wl_registry_add_listener(registry, &registry_listener, NULL);
 	wl_display_roundtrip(display);
 	wl_display_roundtrip(display);
+    pme_log(LOG_DEBUG, "Got registry and registerd listener.");
 
 	struct seat *seat_i;
     // TODO: can specify a seat_name
@@ -266,6 +271,7 @@ int ext_idle_notify_v1_setup(unsigned int timeout) {
 		pme_terminate(-2);
 		return -2;
 	}
+    pme_log(LOG_DEBUG, "Got idle notifier object.");
 	if (seat == NULL) {
 		if (seat_name != NULL) {
 			pme_log(LOG_ERROR, "Seat %s not found.", seat_name);
@@ -275,11 +281,13 @@ int ext_idle_notify_v1_setup(unsigned int timeout) {
 		pme_terminate(-3);
 		return -3;
 	}
+    pme_log(LOG_DEBUG, "Found seat.");
 
 	idle_notification =
 		ext_idle_notifier_v1_get_idle_notification(idle_notifier, timeout, seat);
 	ext_idle_notification_v1_add_listener(idle_notification,
 		&idle_notification_listener, NULL);
+    pme_log(LOG_DEBUG, "Got idle notification object and registered listener.");
     register_alarm(time_left);
 	wl_display_roundtrip(display);
 
@@ -287,6 +295,7 @@ int ext_idle_notify_v1_setup(unsigned int timeout) {
 		wl_display_get_fd(display), WL_EVENT_READABLE,
 		display_event, NULL);
 	wl_event_source_check(source);
+    pme_log(LOG_DEBUG, "Setup display event loop and callback. Entering event loop.");
 
 	while (wl_event_loop_dispatch(event_loop, -1) != 1) {
 		// blank
