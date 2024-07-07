@@ -236,7 +236,7 @@ static int display_event(int fd, uint32_t mask, void *data) {
 	return count;
 }
 
-int ext_idle_notify_v1_setup(unsigned int timeout) {
+void ext_idle_notify_v1_setup(unsigned int timeout) {
 	event_loop = wl_event_loop_create();
 	wl_event_loop_add_signal(event_loop, SIGINT, handle_signal, NULL);
 	wl_event_loop_add_signal(event_loop, SIGTERM, handle_signal, NULL);
@@ -247,7 +247,6 @@ int ext_idle_notify_v1_setup(unsigned int timeout) {
 	if (display == NULL) {
         pme_log(LOG_ERROR, "Cannot connect to wayland display.");
         pme_terminate(-1);
-        return -1;
     }
     pme_log(LOG_DEBUG, "Connected to wayland display.");
 
@@ -269,7 +268,6 @@ int ext_idle_notify_v1_setup(unsigned int timeout) {
 	if (idle_notifier == NULL) {
 		pme_log(LOG_ERROR, "Compositor doesn't support ext_idle_notify_v1 protocol.");
 		pme_terminate(-2);
-		return -2;
 	}
     pme_log(LOG_DEBUG, "Got idle notifier object.");
 	if (seat == NULL) {
@@ -279,7 +277,6 @@ int ext_idle_notify_v1_setup(unsigned int timeout) {
 			pme_log(LOG_ERROR, "No seat found.");
 		}
 		pme_terminate(-3);
-		return -3;
 	}
     pme_log(LOG_DEBUG, "Found seat.");
 
@@ -300,8 +297,6 @@ int ext_idle_notify_v1_setup(unsigned int timeout) {
 	while (wl_event_loop_dispatch(event_loop, -1) != 1) {
 		// blank
 	}
-
-    return 0;
 }
 
 int main(int argc, char *argv[]) {
