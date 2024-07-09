@@ -3,6 +3,7 @@
 #include <time.h>
 #include <string.h>
 #include <stdarg.h>
+#include <limits.h>
 #include <unistd.h>
 #include <wayland-client.h>
 #include <wayland-server.h>
@@ -34,8 +35,13 @@ static struct ext_idle_notification_v1 *idle_notification = NULL;
 static struct wl_list seats;
 static struct wl_seat *seat = NULL;
 static NotifyNotification *message = NULL;
-static const time_t alarm_seconds = 30 * 60;
-static time_t time_left = alarm_seconds;
+static unsigned int idle_timeout = 30 * 1000;
+static unsigned int alarm_seconds = 30 * 60;
+static const char *message_summary = NULL;
+static const char *message_body = NULL;
+static const char *message_icon = NULL;
+
+static unsigned int time_left = 30 * 60;
 static time_t idle_timestamp = 0;
 static time_t register_timestamp = 0;
 
@@ -73,7 +79,7 @@ void register_alarm(unsigned int seconds) {
 
 static void pme_init(const char *app_name) {
     init_libnotify(app_name);
-    message = get_notify_message(NULL, NULL, NULL);
+    message = get_notify_message(message_summary, message_body, message_icon);
     wl_list_init(&seats);
 }
 
@@ -299,11 +305,83 @@ void ext_idle_notify_v1_setup(unsigned int timeout) {
 	}
 }
 
+static void print_usage(int argc, char *argv[]) {
+    printf("Usage: %s [OPTIONS]\n", argv[0]);
+    printf("\t-h\tthis help message\n");
+    printf("\t-i\tidle timeout (ms) - seat with no activity within this timeout are considered as idled\n");
+    printf("\t-t\talarm interval (s) - the time after which %s will alarm you\n", argv[0]);
+    printf("\t-s\talarm message summary\n");
+    printf("\t-b\talarm message body\n");
+    printf("\t-c\talarm message icon\n");
+    printf("\t-d\tdebug mode - enable debug log\n");
+}
+
+static void parse_args(int argc, char *argv[]) {
+    int c;
+    char *inval_ptr;
+    while ((c = getopt(argc, argv, "i:t:dhs:b:c:")) != -1) {
+        switch (c) {
+            case 'i':
+                unsigned long timeout = strtoul(optarg, &inval_ptr, 0);
+                if (timeout == ULONG_MAX) {
+                    pme_log_errno(LOG_ERROR, "Parse idle timeout %s failed", optarg);
+                    pme_terminate(1);
+                }
+                if (timeout > UINT_MAX) {
+                    pme_log(LOG_ERROR, "Idle timeout %lu too large, should less than UINT_MAX.", timeout);
+                    pme_terminate(2);
+                }
+                idle_timeout = (unsigned int)timeout;
+                pme_log(LOG_INFO, "Got idle timeout %ums.", idle_timeout);
+                break;
+            case 't':
+                unsigned long interval = strtoul(optarg, &inval_ptr, 0);
+                if (interval == ULONG_MAX) {
+                    pme_log_errno(LOG_ERROR, "Parse alarm interval %s failed", optarg);
+                    pme_terminate(1);
+                }
+                if (interval > UINT_MAX) {
+                    pme_log(LOG_ERROR, "Alarm interval %lu too large, should less than UINT_MAX.", interval);
+                    pme_terminate(2);
+                }
+                alarm_seconds = (unsigned int)interval;
+                time_left = (unsigned int)interval;
+                pme_log(LOG_INFO, "Got alarm interval %us.", alarm_seconds);
+                break;
+            case 's':
+                message_summary = strdup(optarg);
+                pme_log(LOG_INFO, "Got message summary: %s.", message_summary);
+                break;
+            case 'b':
+                message_body = strdup(optarg);
+                pme_log(LOG_INFO, "Got message body: %s.", message_body);
+                break;
+            case 'c':
+                message_icon = strdup(optarg);
+                pme_log(LOG_INFO, "Got message icon: %s.", message_icon);
+                break;
+            case 'd':
+                pme_log_init(LOG_DEBUG);
+                break;
+            case 'h':
+                print_usage(argc, argv);
+                exit(0);
+                break;
+            case '?':
+                print_usage(argc, argv);
+                exit(1);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
+    parse_args(argc, argv);
     pme_init(argv[0]);
     // TODO: parse_configs();
-    // TODO: parse_args();
-    ext_idle_notify_v1_setup(1000 * 10);
+    ext_idle_notify_v1_setup(idle_timeout);
 	pme_terminate(0);
 }
 
