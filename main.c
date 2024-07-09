@@ -13,18 +13,18 @@
 #include "log.h"
 
 struct seat {
-	struct wl_list link;
-	struct wl_seat *proxy;
+    struct wl_list link;
+    struct wl_seat *proxy;
 
-	char *name;
-	uint32_t capabilities;
+    char *name;
+    uint32_t capabilities;
 };
 
 static const char *verbosity_colors[] = {
-	[LOG_SILENT] = "",
-	[LOG_ERROR ] = "\x1B[1;31m",
-	[LOG_INFO  ] = "\x1B[1;34m",
-	[LOG_DEBUG ] = "\x1B[1;30m",
+    [LOG_SILENT] = "",
+    [LOG_ERROR ] = "\x1B[1;31m",
+    [LOG_INFO  ] = "\x1B[1;34m",
+    [LOG_DEBUG ] = "\x1B[1;30m",
 };
 static enum log_level curr_log_level = LOG_INFO;
 
@@ -85,55 +85,55 @@ static void pme_init(const char *app_name) {
 
 static void pme_terminate(int exit_code) {
     pme_log(LOG_INFO, "Terminating.");
-	wl_display_disconnect(display);
-	wl_event_loop_destroy(event_loop);
+    wl_display_disconnect(display);
+    wl_event_loop_destroy(event_loop);
     destroy_libnotify(message);
-	exit(exit_code);
+    exit(exit_code);
 }
 
 void pme_log_init(enum log_level verbosity) {
-	if (verbosity < LOG_LEVEL_LAST) {
-		curr_log_level = verbosity;
-	}
+    if (verbosity < LOG_LEVEL_LAST) {
+        curr_log_level = verbosity;
+    }
 }
 
 void _pme_log(enum log_level verbosity, const char *fmt, ...) {
-	if (verbosity > curr_log_level) {
-		return;
-	}
+    if (verbosity > curr_log_level) {
+        return;
+    }
 
-	va_list args;
-	va_start(args, fmt);
+    va_list args;
+    va_start(args, fmt);
 
-	// prefix the time to the log message
-	struct tm result;
-	time_t t = time(NULL);
-	struct tm *tm_info = localtime_r(&t, &result);
-	char buffer[26];
+    // prefix the time to the log message
+    struct tm result;
+    time_t t = time(NULL);
+    struct tm *tm_info = localtime_r(&t, &result);
+    char buffer[26];
 
-	// generate time prefix
-	strftime(buffer, sizeof(buffer), "%F %T - ", tm_info);
-	fprintf(stderr, "%s", buffer);
+    // generate time prefix
+    strftime(buffer, sizeof(buffer), "%F %T - ", tm_info);
+    fprintf(stderr, "%s", buffer);
 
-	unsigned c = (verbosity < LOG_LEVEL_LAST)
-		? verbosity : LOG_LEVEL_LAST - 1;
+    unsigned c = (verbosity < LOG_LEVEL_LAST)
+        ? verbosity : LOG_LEVEL_LAST - 1;
 
-	if (isatty(STDERR_FILENO)) {
-		fprintf(stderr, "%s", verbosity_colors[c]);
-	}
+    if (isatty(STDERR_FILENO)) {
+        fprintf(stderr, "%s", verbosity_colors[c]);
+    }
 
-	vfprintf(stderr, fmt, args);
+    vfprintf(stderr, fmt, args);
 
-	if (isatty(STDERR_FILENO)) {
-		fprintf(stderr, "\x1B[0m");
-	}
-	fprintf(stderr, "\n");
+    if (isatty(STDERR_FILENO)) {
+        fprintf(stderr, "\x1B[0m");
+    }
+    fprintf(stderr, "\n");
 
-	va_end(args);
+    va_end(args);
 }
 
 static int handle_signal(int sig, void *data) {
-	switch (sig) {
+    switch (sig) {
         case SIGINT:
         case SIGTERM:
             pme_log(LOG_DEBUG, "Got SIGTERM.");
@@ -156,45 +156,45 @@ static int handle_signal(int sig, void *data) {
 }
 
 static void seat_handle_capabilities(void *data, struct wl_seat *seat,
-		uint32_t capabilities) {
-	struct seat *self = data;
-	self->capabilities = capabilities;
+        uint32_t capabilities) {
+    struct seat *self = data;
+    self->capabilities = capabilities;
 }
 
 static void seat_handle_name(void *data, struct wl_seat *seat,
-		const char *name) {
-	struct seat *self = data;
-	self->name = strdup(name);
+        const char *name) {
+    struct seat *self = data;
+    self->name = strdup(name);
 }
 
 static const struct wl_seat_listener wl_seat_listener = {
-	.name = seat_handle_name,
-	.capabilities = seat_handle_capabilities,
+    .name = seat_handle_name,
+    .capabilities = seat_handle_capabilities,
 };
 
 static void handle_global(void *data, struct wl_registry *registry,
-		uint32_t name, const char *interface, uint32_t version) {
+        uint32_t name, const char *interface, uint32_t version) {
     pme_log(LOG_DEBUG, "Found interface %s.", interface);
-	if (strcmp(interface, ext_idle_notifier_v1_interface.name) == 0) {
-		idle_notifier =
-			wl_registry_bind(registry, name, &ext_idle_notifier_v1_interface, 1);
-	} else if (strcmp(interface, wl_seat_interface.name) == 0) {
-		struct seat *s = calloc(1, sizeof(struct seat));
-		s->proxy = wl_registry_bind(registry, name, &wl_seat_interface, 2);
+    if (strcmp(interface, ext_idle_notifier_v1_interface.name) == 0) {
+        idle_notifier =
+            wl_registry_bind(registry, name, &ext_idle_notifier_v1_interface, 1);
+    } else if (strcmp(interface, wl_seat_interface.name) == 0) {
+        struct seat *s = calloc(1, sizeof(struct seat));
+        s->proxy = wl_registry_bind(registry, name, &wl_seat_interface, 2);
 
-		wl_seat_add_listener(s->proxy, &wl_seat_listener, s);
-		wl_list_insert(&seats, &s->link);
-	}
+        wl_seat_add_listener(s->proxy, &wl_seat_listener, s);
+        wl_list_insert(&seats, &s->link);
+    }
 }
 
 static void handle_global_remove(void *data, struct wl_registry *registry,
-		uint32_t name) {
-	// blank
+        uint32_t name) {
+    // blank
 }
 
 static const struct wl_registry_listener registry_listener = {
-	.global = handle_global,
-	.global_remove = handle_global_remove,
+    .global = handle_global,
+    .global_remove = handle_global_remove,
 };
 
 static void handle_idled(void *data, struct ext_idle_notification_v1 *notif) {
@@ -213,96 +213,96 @@ static void handle_resumed(void *data, struct ext_idle_notification_v1 *notif) {
 }
 
 static const struct ext_idle_notification_v1_listener idle_notification_listener = {
-	.idled = handle_idled,
-	.resumed = handle_resumed,
+    .idled = handle_idled,
+    .resumed = handle_resumed,
 };
 
 static int display_event(int fd, uint32_t mask, void *data) {
-	if ((mask & WL_EVENT_HANGUP) || (mask & WL_EVENT_ERROR)) {
-		pme_terminate(0);
-	}
+    if ((mask & WL_EVENT_HANGUP) || (mask & WL_EVENT_ERROR)) {
+        pme_terminate(0);
+    }
 
-	int count = 0;
-	if (mask & WL_EVENT_READABLE) {
-		count = wl_display_dispatch(display);
-	}
-	if (mask & WL_EVENT_WRITABLE) {
-		wl_display_flush(display);
-	}
-	if (mask == 0) {
-		count = wl_display_dispatch_pending(display);
-		wl_display_flush(display);
-	}
+    int count = 0;
+    if (mask & WL_EVENT_READABLE) {
+        count = wl_display_dispatch(display);
+    }
+    if (mask & WL_EVENT_WRITABLE) {
+        wl_display_flush(display);
+    }
+    if (mask == 0) {
+        count = wl_display_dispatch_pending(display);
+        wl_display_flush(display);
+    }
 
-	if (count < 0) {
-		pme_log_errno(LOG_ERROR, "wl_display_dispatch failed, exiting.");
-		pme_terminate(0);
-	}
+    if (count < 0) {
+        pme_log_errno(LOG_ERROR, "wl_display_dispatch failed, exiting.");
+        pme_terminate(0);
+    }
 
-	return count;
+    return count;
 }
 
 void ext_idle_notify_v1_setup(unsigned int timeout) {
-	event_loop = wl_event_loop_create();
-	wl_event_loop_add_signal(event_loop, SIGINT, handle_signal, NULL);
-	wl_event_loop_add_signal(event_loop, SIGTERM, handle_signal, NULL);
-	wl_event_loop_add_signal(event_loop, SIGUSR1, handle_signal, NULL);
-	wl_event_loop_add_signal(event_loop, SIGALRM, handle_signal, NULL);
+    event_loop = wl_event_loop_create();
+    wl_event_loop_add_signal(event_loop, SIGINT, handle_signal, NULL);
+    wl_event_loop_add_signal(event_loop, SIGTERM, handle_signal, NULL);
+    wl_event_loop_add_signal(event_loop, SIGUSR1, handle_signal, NULL);
+    wl_event_loop_add_signal(event_loop, SIGALRM, handle_signal, NULL);
 
-	display = wl_display_connect(NULL);
-	if (display == NULL) {
+    display = wl_display_connect(NULL);
+    if (display == NULL) {
         pme_log(LOG_ERROR, "Cannot connect to wayland display.");
         pme_terminate(-1);
     }
     pme_log(LOG_DEBUG, "Connected to wayland display.");
 
-	struct wl_registry *registry = wl_display_get_registry(display);
-	wl_registry_add_listener(registry, &registry_listener, NULL);
-	wl_display_roundtrip(display);
-	wl_display_roundtrip(display);
+    struct wl_registry *registry = wl_display_get_registry(display);
+    wl_registry_add_listener(registry, &registry_listener, NULL);
+    wl_display_roundtrip(display);
+    wl_display_roundtrip(display);
     pme_log(LOG_DEBUG, "Got registry and registerd listener.");
 
-	struct seat *seat_i;
+    struct seat *seat_i;
     // TODO: can specify a seat_name
     char *seat_name = NULL;
-	wl_list_for_each(seat_i, &seats, link) {
-		if (seat_name == NULL || strcmp(seat_i->name, seat_name) == 0) {
-			seat = seat_i->proxy;
-		}
-	}
+    wl_list_for_each(seat_i, &seats, link) {
+        if (seat_name == NULL || strcmp(seat_i->name, seat_name) == 0) {
+            seat = seat_i->proxy;
+        }
+    }
 
-	if (idle_notifier == NULL) {
-		pme_log(LOG_ERROR, "Compositor doesn't support ext_idle_notify_v1 protocol.");
-		pme_terminate(-2);
-	}
+    if (idle_notifier == NULL) {
+        pme_log(LOG_ERROR, "Compositor doesn't support ext_idle_notify_v1 protocol.");
+        pme_terminate(-2);
+    }
     pme_log(LOG_DEBUG, "Got idle notifier object.");
-	if (seat == NULL) {
-		if (seat_name != NULL) {
-			pme_log(LOG_ERROR, "Seat %s not found.", seat_name);
-		} else {
-			pme_log(LOG_ERROR, "No seat found.");
-		}
-		pme_terminate(-3);
-	}
+    if (seat == NULL) {
+        if (seat_name != NULL) {
+            pme_log(LOG_ERROR, "Seat %s not found.", seat_name);
+        } else {
+            pme_log(LOG_ERROR, "No seat found.");
+        }
+        pme_terminate(-3);
+    }
     pme_log(LOG_DEBUG, "Found seat.");
 
-	idle_notification =
-		ext_idle_notifier_v1_get_idle_notification(idle_notifier, timeout, seat);
-	ext_idle_notification_v1_add_listener(idle_notification,
-		&idle_notification_listener, NULL);
+    idle_notification =
+        ext_idle_notifier_v1_get_idle_notification(idle_notifier, timeout, seat);
+    ext_idle_notification_v1_add_listener(idle_notification,
+        &idle_notification_listener, NULL);
     pme_log(LOG_DEBUG, "Got idle notification object and registered listener.");
     register_alarm(time_left);
-	wl_display_roundtrip(display);
+    wl_display_roundtrip(display);
 
-	struct wl_event_source *source = wl_event_loop_add_fd(event_loop,
-		wl_display_get_fd(display), WL_EVENT_READABLE,
-		display_event, NULL);
-	wl_event_source_check(source);
+    struct wl_event_source *source = wl_event_loop_add_fd(event_loop,
+        wl_display_get_fd(display), WL_EVENT_READABLE,
+        display_event, NULL);
+    wl_event_source_check(source);
     pme_log(LOG_DEBUG, "Setup display event loop and callback. Entering event loop.");
 
-	while (wl_event_loop_dispatch(event_loop, -1) != 1) {
-		// blank
-	}
+    while (wl_event_loop_dispatch(event_loop, -1) != 1) {
+        // blank
+    }
 }
 
 static void print_usage(int argc, char *argv[]) {
@@ -382,6 +382,6 @@ int main(int argc, char *argv[]) {
     pme_init(argv[0]);
     // TODO: parse_configs();
     ext_idle_notify_v1_setup(idle_timeout);
-	pme_terminate(0);
+    pme_terminate(0);
 }
 
