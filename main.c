@@ -144,13 +144,16 @@ static int handle_signal(int sig, void *data) {
             pme_log(LOG_DEBUG, "Got SIGUSR1.");
             // Cancel the alarm.
             register_alarm(0);
+            // Reset the alarm.
+            time_left = alarm_seconds;
+            register_alarm(time_left);
             return 1;
         case SIGALRM:
             pme_log(LOG_DEBUG, "Got SIGALRM.");
             show_notify_message(message);
             // Reset the alarm.
             time_left = alarm_seconds;
-            register_alarm(alarm_seconds);
+            register_alarm(time_left);
             return 2;
     }
     abort(); // not reached
