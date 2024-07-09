@@ -34,6 +34,7 @@ static struct ext_idle_notifier_v1 *idle_notifier = NULL;
 static struct ext_idle_notification_v1 *idle_notification = NULL;
 static struct wl_list seats;
 static struct wl_seat *seat = NULL;
+static char *seat_name = NULL;
 static NotifyNotification *message = NULL;
 static unsigned int idle_timeout = 30 * 1000;
 static unsigned int alarm_seconds = 30 * 60;
@@ -263,8 +264,6 @@ void ext_idle_notify_v1_setup(unsigned int timeout) {
     pme_log(LOG_DEBUG, "Got registry and registerd listener.");
 
     struct seat *seat_i;
-    // TODO: can specify a seat_name
-    char *seat_name = NULL;
     wl_list_for_each(seat_i, &seats, link) {
         if (seat_name == NULL || strcmp(seat_i->name, seat_name) == 0) {
             seat = seat_i->proxy;
@@ -313,13 +312,14 @@ static void print_usage(int argc, char *argv[]) {
     printf("\t-s\talarm message summary\n");
     printf("\t-b\talarm message body\n");
     printf("\t-c\talarm message icon\n");
+    printf("\t-S\tspecify seat name\n");
     printf("\t-d\tdebug mode - enable debug log\n");
 }
 
 static void parse_args(int argc, char *argv[]) {
     int c;
     char *inval_ptr;
-    while ((c = getopt(argc, argv, "i:t:dhs:b:c:")) != -1) {
+    while ((c = getopt(argc, argv, "i:t:dhs:b:c:S:")) != -1) {
         switch (c) {
             case 'i':
                 unsigned long timeout = strtoul(optarg, &inval_ptr, 0);
@@ -359,6 +359,10 @@ static void parse_args(int argc, char *argv[]) {
             case 'c':
                 message_icon = strdup(optarg);
                 pme_log(LOG_INFO, "Got message icon: %s.", message_icon);
+                break;
+            case 'S':
+                seat_name = strdup(optarg);
+                pme_log(LOG_INFO, "Got seat name: %s.", seat_name);
                 break;
             case 'd':
                 pme_log_init(LOG_DEBUG);
