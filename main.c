@@ -41,6 +41,7 @@ static unsigned int alarm_seconds = 30 * 60;
 static const char *message_summary = NULL;
 static const char *message_body = NULL;
 static const char *message_icon = NULL;
+static int message_urgency = NOTIFY_URGENCY_NORMAL;
 
 static unsigned int time_left = 30 * 60;
 static time_t idle_timestamp = 0;
@@ -50,12 +51,13 @@ static void init_libnotify(const char *app_name) {
     notify_init(app_name);
 }
 
-static NotifyNotification * get_notify_message(const char *summary, const char *body, const char *icon) {
+static NotifyNotification * get_notify_message(const char *summary, const char *body, const char *icon, const NotifyUrgency urgency) {
     NotifyNotification *msg = notify_notification_new(
             summary == NULL ? "Protect Your Eyes"                    : summary,
             body    == NULL ? "Timeout reached. Have a rest please." : body,
             icon    == NULL ? "dialog-information"                   : icon
             );
+    notify_notification_set_urgency(msg, urgency);
     return msg;
 }
 
@@ -80,7 +82,7 @@ void register_alarm(unsigned int seconds) {
 
 static void pme_init(const char *app_name) {
     init_libnotify(app_name);
-    message = get_notify_message(message_summary, message_body, message_icon);
+    message = get_notify_message(message_summary, message_body, message_icon, message_urgency);
     wl_list_init(&seats);
 }
 
@@ -315,6 +317,7 @@ static void print_usage(int argc, char *argv[]) {
     printf("\t-s\talarm message summary\n");
     printf("\t-b\talarm message body\n");
     printf("\t-c\talarm message icon\n");
+    printf("\t-u\talarm message urgency\n");
     printf("\t-S\tspecify seat name\n");
     printf("\t-d\tdebug mode - enable debug log\n");
 }
@@ -322,12 +325,12 @@ static void print_usage(int argc, char *argv[]) {
 static void parse_args(int argc, char *argv[]) {
     int c;
     char *inval_ptr;
-    while ((c = getopt(argc, argv, "i:t:dhs:b:c:S:")) != -1) {
+    while ((c = getopt(argc, argv, "i:t:dhs:b:c:u:S:")) != -1) {
         switch (c) {
             case 'i':
                 unsigned long timeout = strtoul(optarg, &inval_ptr, 0);
                 if (timeout == ULONG_MAX) {
-                    pme_log_errno(LOG_ERROR, "Parse idle timeout %s failed", optarg);
+                    pme_log_errno(LOG_ERROR, "Parse idle timeout %s failed.", optarg);
                     pme_terminate(1);
                 }
                 if (timeout > UINT_MAX) {
@@ -340,7 +343,7 @@ static void parse_args(int argc, char *argv[]) {
             case 't':
                 unsigned long interval = strtoul(optarg, &inval_ptr, 0);
                 if (interval == ULONG_MAX) {
-                    pme_log_errno(LOG_ERROR, "Parse alarm interval %s failed", optarg);
+                    pme_log_errno(LOG_ERROR, "Parse alarm interval %s failed.", optarg);
                     pme_terminate(1);
                 }
                 if (interval > UINT_MAX) {
@@ -349,7 +352,7 @@ static void parse_args(int argc, char *argv[]) {
                 }
                 alarm_seconds = (unsigned int)interval;
                 time_left = (unsigned int)interval;
-                pme_log(LOG_INFO, "Got alarm interval %us.", alarm_seconds);
+                pme_log(LOG_INFO, "Got alarm interval: %us.", alarm_seconds);
                 break;
             case 's':
                 message_summary = strdup(optarg);
@@ -362,6 +365,19 @@ static void parse_args(int argc, char *argv[]) {
             case 'c':
                 message_icon = strdup(optarg);
                 pme_log(LOG_INFO, "Got message icon: %s.", message_icon);
+                break;
+            case 'u':
+                message_urgency = atoi(optarg);
+                if (message_urgency == 0) {
+                    pme_log_errno(LOG_ERROR, "Parse message urgency %s failed.", optarg);
+                    pme_terminate(1);
+                }
+                if (message_urgency < NOTIFY_URGENCY_LOW || message_urgency > NOTIFY_URGENCY_CRITICAL) {
+                    pme_log(LOG_ERROR, "Message urgency %d invalid, should between %d and %d.",
+                            message_urgency, NOTIFY_URGENCY_LOW , NOTIFY_URGENCY_CRITICAL);
+                    pme_terminate(2);
+                }
+                pme_log(LOG_INFO, "Got message urgency: %d.", message_urgency);
                 break;
             case 'S':
                 seat_name = strdup(optarg);
