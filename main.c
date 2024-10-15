@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <limits.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #include <wayland-client.h>
 #include <wayland-server.h>
 #include <wayland-util.h>
@@ -42,6 +43,7 @@ static const char *message_summary = NULL;
 static const char *message_body = NULL;
 static const char *message_icon = NULL;
 static int message_urgency = NOTIFY_URGENCY_NORMAL;
+static char *command = NULL;
 
 static unsigned int time_left = 30 * 60;
 static time_t idle_timestamp = 0;
@@ -69,6 +71,43 @@ static void show_notify_message(NotifyNotification *msg) {
 static void destroy_libnotify(const NotifyNotification *msg) {
     g_object_unref(G_OBJECT(msg));
     notify_uninit();
+}
+
+static void run_command(char *cmd) {
+    pme_log(LOG_INFO, "Executing command: %s", cmd);
+    pid_t pid = fork();
+    if (pid == 0) {
+        char *const wrapped_cmd[] = {"sh", "-c", cmd, NULL};
+        pid = fork();
+        if (pid == 0) {
+            sigset_t set;
+            sigemptyset(&set);
+            sigprocmask(SIG_SETMASK, &set, NULL);
+            signal(SIGINT, SIG_DFL);
+            signal(SIGTERM, SIG_DFL);
+            signal(SIGUSR1, SIG_DFL);
+            signal(SIGALRM, SIG_DFL);
+
+            execvp(wrapped_cmd[0], wrapped_cmd);
+            pme_log_errno(LOG_ERROR, "execvp failed.");
+            exit(1);
+        } else if (pid < 0) {
+            pme_log(LOG_DEBUG, "Spawned grandchild process to execute: %s %s %s", wrapped_cmd[0], wrapped_cmd[1], wrapped_cmd[2]);
+            exit(0);
+        } else {
+            pme_log_errno(LOG_ERROR, "fork grandchild failed.");
+            exit(1);
+        }
+    } else if (pid > 0) {
+        pme_log(LOG_DEBUG, "Spawned child process to execute: %s", cmd);
+        int status;
+        if (waitpid(pid, &status, 0) == -1)
+            pme_log_errno(LOG_ERROR, "waitpid failed.");
+        if (WIFEXITED(status))
+            pme_log(LOG_DEBUG, "Child process exited with status %d.", WEXITSTATUS(status));
+    } else {
+        pme_log_errno(LOG_ERROR, "fork child failed.");
+    }
 }
 
 void register_alarm(unsigned int seconds) {
@@ -153,6 +192,8 @@ static int handle_signal(int sig, void *data) {
         case SIGALRM:
             pme_log(LOG_DEBUG, "Got SIGALRM.");
             show_notify_message(message);
+            if (command != NULL)
+                run_command(command);
             // Reset the alarm.
             time_left = alarm_seconds;
             register_alarm(time_left);
@@ -319,13 +360,14 @@ static void print_usage(int argc, char *argv[]) {
     printf("\t-c\talarm message icon\n");
     printf("\t-u\talarm message urgency\n");
     printf("\t-S\tspecify seat name\n");
+    printf("\t-x\tcommand to execute when timeout reached\n");
     printf("\t-d\tdebug mode - enable debug log\n");
 }
 
 static void parse_args(int argc, char *argv[]) {
     int c;
     char *inval_ptr;
-    while ((c = getopt(argc, argv, "i:t:dhs:b:c:u:S:")) != -1) {
+    while ((c = getopt(argc, argv, "i:t:dhs:b:c:u:S:x:")) != -1) {
         switch (c) {
             case 'i':
                 unsigned long timeout = strtoul(optarg, &inval_ptr, 0);
@@ -382,6 +424,10 @@ static void parse_args(int argc, char *argv[]) {
             case 'S':
                 seat_name = strdup(optarg);
                 pme_log(LOG_INFO, "Got seat name: %s.", seat_name);
+                break;
+            case 'x':
+                command = strdup(optarg);
+                pme_log(LOG_INFO, "Got timeout command: %s.", command);
                 break;
             case 'd':
                 pme_log_init(LOG_DEBUG);
