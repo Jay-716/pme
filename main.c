@@ -45,9 +45,8 @@ static const char *message_icon = NULL;
 static int message_urgency = NOTIFY_URGENCY_NORMAL;
 static char *command = NULL;
 
-static unsigned int time_left = 30 * 60;
+static unsigned int time_left = 0;
 static time_t idle_timestamp = 0;
-static time_t register_timestamp = 0;
 
 static void init_libnotify(const char *app_name) {
     notify_init(app_name);
@@ -91,7 +90,7 @@ static void run_command(char *cmd) {
             execvp(wrapped_cmd[0], wrapped_cmd);
             pme_log_errno(LOG_ERROR, "execvp failed.");
             exit(1);
-        } else if (pid < 0) {
+        } else if (pid > 0) {
             pme_log(LOG_DEBUG, "Spawned grandchild process to execute: %s %s %s", wrapped_cmd[0], wrapped_cmd[1], wrapped_cmd[2]);
             exit(0);
         } else {
@@ -111,7 +110,6 @@ static void run_command(char *cmd) {
 }
 
 void register_alarm(unsigned int seconds) {
-    register_timestamp = time(NULL);
     alarm(seconds);
     if (seconds == 0)
         pme_log(LOG_DEBUG, "Alarm cancelled.");
@@ -186,17 +184,22 @@ static int handle_signal(int sig, void *data) {
             // Cancel the alarm.
             register_alarm(0);
             // Reset the alarm.
-            time_left = alarm_seconds;
-            register_alarm(time_left);
+            time_left = 0;
+            register_alarm(alarm_seconds);
             return 1;
         case SIGALRM:
             pme_log(LOG_DEBUG, "Got SIGALRM.");
-            show_notify_message(message);
-            if (command != NULL)
-                run_command(command);
-            // Reset the alarm.
-            time_left = alarm_seconds;
-            register_alarm(time_left);
+            // If time_left is zero, show the notification message.
+            // Otherwise, alarm in time_left seconds.
+            if (time_left == 0) {
+                show_notify_message(message);
+                if (command != NULL)
+                    run_command(command);
+                register_alarm(alarm_seconds);
+            } else {
+                register_alarm(time_left);
+                time_left = 0;
+            }
             return 2;
     }
     abort(); // not reached
@@ -247,16 +250,12 @@ static const struct wl_registry_listener registry_listener = {
 static void handle_idled(void *data, struct ext_idle_notification_v1 *notif) {
     pme_log(LOG_DEBUG, "Idled.");
     idle_timestamp = time(NULL);
-    time_left -= idle_timestamp - register_timestamp;
-    // Cancel the alarm.
-    register_alarm(0);
 }
 
 static void handle_resumed(void *data, struct ext_idle_notification_v1 *notif) {
     pme_log(LOG_DEBUG, "Resumed.");
-    // Resume the alarm.
-    if (time_left > 0)
-        register_alarm(time_left);
+    time_left += time(NULL) - idle_timestamp;
+    pme_log(LOG_DEBUG, "Idle time: %u.", time_left);
 }
 
 static const struct ext_idle_notification_v1_listener idle_notification_listener = {
@@ -336,7 +335,7 @@ void ext_idle_notify_v1_setup(unsigned int timeout) {
     ext_idle_notification_v1_add_listener(idle_notification,
         &idle_notification_listener, NULL);
     pme_log(LOG_DEBUG, "Got idle notification object and registered listener.");
-    register_alarm(time_left);
+    register_alarm(alarm_seconds);
     wl_display_roundtrip(display);
 
     struct wl_event_source *source = wl_event_loop_add_fd(event_loop,
@@ -393,7 +392,6 @@ static void parse_args(int argc, char *argv[]) {
                     pme_terminate(2);
                 }
                 alarm_seconds = (unsigned int)interval;
-                time_left = (unsigned int)interval;
                 pme_log(LOG_INFO, "Got alarm interval: %us.", alarm_seconds);
                 break;
             case 's':
