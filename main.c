@@ -47,6 +47,7 @@ static char *command = NULL;
 
 static unsigned int time_left = 0;
 static time_t idle_timestamp = 0;
+static bool inhibited = false;
 
 static void init_libnotify(const char *app_name) {
     notify_init(app_name);
@@ -85,6 +86,7 @@ static void run_command(char *cmd) {
             signal(SIGINT, SIG_DFL);
             signal(SIGTERM, SIG_DFL);
             signal(SIGUSR1, SIG_DFL);
+            signal(SIGUSR2, SIG_DFL);
             signal(SIGALRM, SIG_DFL);
 
             execvp(wrapped_cmd[0], wrapped_cmd);
@@ -186,7 +188,22 @@ static int handle_signal(int sig, void *data) {
             // Reset the alarm.
             time_left = 0;
             register_alarm(alarm_seconds);
-            return 1;
+            return 0;
+        case SIGUSR2:
+            pme_log(LOG_DEBUG, "Got SIGUSR2.");
+            if (inhibited) {
+                // Resume.
+                pme_log(LOG_INFO, "Resumed.");
+                time_left = 0;
+                idle_timestamp = time(NULL);
+                register_alarm(alarm_seconds);
+            } else {
+                // Inhibit.
+                pme_log(LOG_INFO, "Inhibited.");
+                register_alarm(0);
+            }
+            inhibited = !inhibited;
+            return 0;
         case SIGALRM:
             pme_log(LOG_DEBUG, "Got SIGALRM.");
             // If time_left is zero, show the notification message.
@@ -200,7 +217,7 @@ static int handle_signal(int sig, void *data) {
                 register_alarm(time_left);
                 time_left = 0;
             }
-            return 2;
+            return 0;
     }
     abort(); // not reached
 }
@@ -293,6 +310,7 @@ void ext_idle_notify_v1_setup(unsigned int timeout) {
     wl_event_loop_add_signal(event_loop, SIGINT, handle_signal, NULL);
     wl_event_loop_add_signal(event_loop, SIGTERM, handle_signal, NULL);
     wl_event_loop_add_signal(event_loop, SIGUSR1, handle_signal, NULL);
+    wl_event_loop_add_signal(event_loop, SIGUSR2, handle_signal, NULL);
     wl_event_loop_add_signal(event_loop, SIGALRM, handle_signal, NULL);
 
     display = wl_display_connect(NULL);
