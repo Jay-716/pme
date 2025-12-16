@@ -46,7 +46,6 @@ static int message_urgency = NOTIFY_URGENCY_NORMAL;
 static char *command = NULL;
 
 static unsigned int time_left = 0;
-static time_t idle_timestamp = 0;
 static bool inhibited = false;
 
 static void init_libnotify(const char *app_name) {
@@ -111,12 +110,13 @@ static void run_command(char *cmd) {
     }
 }
 
-void register_alarm(unsigned int seconds) {
-    alarm(seconds);
+static unsigned int register_alarm(unsigned int seconds) {
+    unsigned int remain = alarm(seconds);
     if (seconds == 0)
         pme_log(LOG_DEBUG, "Alarm cancelled.");
     else
         pme_log(LOG_DEBUG, "Register alarm with %u seconds.", seconds);
+    return remain;
 }
 
 static void pme_init(const char *app_name) {
@@ -183,40 +183,32 @@ static int handle_signal(int sig, void *data) {
             return 0;
         case SIGUSR1:
             pme_log(LOG_DEBUG, "Got SIGUSR1.");
-            // Cancel the alarm.
-            register_alarm(0);
             // Reset the alarm.
-            time_left = 0;
             register_alarm(alarm_seconds);
+            time_left = alarm_seconds;
             return 0;
         case SIGUSR2:
             pme_log(LOG_DEBUG, "Got SIGUSR2.");
             if (inhibited) {
                 // Resume.
                 pme_log(LOG_INFO, "Resumed.");
-                time_left = 0;
-                idle_timestamp = time(NULL);
-                register_alarm(alarm_seconds);
+                register_alarm(time_left);
             } else {
                 // Inhibit.
                 pme_log(LOG_INFO, "Inhibited.");
-                register_alarm(0);
+                unsigned int remain = register_alarm(0);
+                time_left = remain;
             }
             inhibited = !inhibited;
             return 0;
         case SIGALRM:
             pme_log(LOG_DEBUG, "Got SIGALRM.");
-            // If time_left is zero, show the notification message.
-            // Otherwise, alarm in time_left seconds.
-            if (time_left == 0) {
-                show_notify_message(message);
-                if (command != NULL)
-                    run_command(command);
-                register_alarm(alarm_seconds);
-            } else {
-                register_alarm(time_left);
-                time_left = 0;
-            }
+            // Show the notification message and register next alarm.
+            show_notify_message(message);
+            if (command != NULL)
+                run_command(command);
+            register_alarm(alarm_seconds);
+            time_left = alarm_seconds;
             return 0;
     }
     abort(); // not reached
@@ -266,13 +258,14 @@ static const struct wl_registry_listener registry_listener = {
 
 static void handle_idled(void *data, struct ext_idle_notification_v1 *notif) {
     pme_log(LOG_DEBUG, "Idled.");
-    idle_timestamp = time(NULL);
+    unsigned int remain = register_alarm(0);
+    time_left = remain;
+    pme_log(LOG_DEBUG, "Time left: %u", time_left);
 }
 
 static void handle_resumed(void *data, struct ext_idle_notification_v1 *notif) {
     pme_log(LOG_DEBUG, "Resumed.");
-    time_left += time(NULL) - idle_timestamp;
-    pme_log(LOG_DEBUG, "Idle time: %u.", time_left);
+    register_alarm(time_left);
 }
 
 static const struct ext_idle_notification_v1_listener idle_notification_listener = {
